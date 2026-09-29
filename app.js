@@ -4,7 +4,7 @@
    Change only WORKER_URL below after deploying the Cloudflare Worker.
 */
 const CONFIG = {
-  WORKER_URL: "PASTE_YOUR_CLOUDFLARE_WORKER_URL_HERE"
+  WORKER_URL: "https://ipos.mankrishsolutions.workers.dev"
 };
 
 const $ = (id) => document.getElementById(id);
