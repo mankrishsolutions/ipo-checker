@@ -3,6 +3,7 @@ const WORKER = 'https://ipos.mankrishsolutions.workers.dev';
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmt = (v, p = '', s = '') => v == null ? 'n/a' : p + v + s;
+const DISC = '<b>Research only, not advice.</b> This is not a suggestion to apply or not to apply for any IPO. Scores only summarise data found on public websites, which can be wrong, delayed or incomplete. Verify on the source pages and speak to a SEBI-registered advisor before investing.';
 let names = [];
 
 function drawChips() {
@@ -30,7 +31,7 @@ function card(d) {
   const list = (t, a) => a && a.length ? `<div><h4>${t}</h4><ul class="srcs">${a.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
   const news = d.news && d.news.length ? `<h4>Latest news and analyst views</h4><ul class="srcs">${d.news.map(n => `<li><a href="${esc(n.url)}" target="_blank" rel="noopener">${esc(n.title)}</a> <small>${esc(n.date)}</small></li>`).join('')}</ul>` : '';
   const closed = d.status === 'Bidding closed' ? '<p class="sub">Bidding has closed, so read this as a listing-day view rather than an application call.</p>' : '';
-  return `<article class="card"><div class="head"><h3>${esc(d.name)}</h3><span class="badge ${c}">${d.call}</span><div class="ring" style="--s:${d.score}"><span>${d.score}</span></div></div>
+  return `<article class="card"><div class="head"><h3>${esc(d.name)}</h3><div class="ring" style="--s:${d.score}"><span>${d.score}</span></div></div>
     <p class="verdict ${c}">${esc(d.verdict)}</p>
     <div class="meta">${d.status ? `<span>${esc(d.status)}</span>` : ''}${d.dates ? `<span>${esc(d.dates)}</span>` : ''}<span>Confidence: ${d.confidence || 'Low'}</span>${d.issue ? `<span>Issue ₹${d.issue} Cr</span>` : ''}</div>${closed}
     <div class="bars">${bars}</div>
@@ -53,8 +54,8 @@ function card(d) {
 
 function render(data) {
   data.sort((a, b) => b.score - a.score);
-  const pod = data.map((d, i) => `<li class="${d.call.replace(' ', '')}"><span class="n">#${i + 1}</span><span class="nm">${esc(d.name)}<small>${d.status ? esc(d.status) : 'Status unknown'}</small></span><span class="badge ${d.call.replace(' ', '')}">${d.call}</span><div class="ring" style="--s:${d.score}"><span>${d.score}</span></div></li>`).join('');
-  $('#out').innerHTML = `<h2>Apply in this order</h2><ol class="podium">${pod}</ol><h2>The full picture</h2><div class="cards">${data.map(card).join('')}</div>`;
+  const pod = data.map((d, i) => `<li class="${d.call.replace(' ', '')}"><span class="n">#${i + 1}</span><span class="nm">${esc(d.name)}<small>${d.status ? esc(d.status) : 'Status unknown'}</small></span><div class="ring" style="--s:${d.score}"><span>${d.score}</span></div></li>`).join('');
+  $('#out').innerHTML = `<p class="disc">${DISC}</p><h2>Ranked by research score</h2><ol class="podium">${pod}</ol><h2>The full picture</h2><div class="cards">${data.map(card).join('')}</div><p class="disc">${DISC}</p>`;
   try {
     const h = JSON.parse(localStorage.getItem('ipo_hist') || '[]');
     h.unshift({ t: new Date().toLocaleString(), r: data.map(d => ({ name: d.name, score: d.score, call: d.call })) });
@@ -65,7 +66,7 @@ function render(data) {
 function drawHistory() {
   let h = [];
   try { h = JSON.parse(localStorage.getItem('ipo_hist') || '[]'); } catch (e) {}
-  $('#hist').innerHTML = h.length ? h.map(x => `<div class="hist"><small>${esc(x.t)}</small><br>${x.r.map((d, i) => `${i + 1}. ${esc(d.name)}: ${d.call} (${d.score})`).join('<br>')}</div>`).join('') : '<p class="sub">Nothing yet. Run a check first.</p>';
+  $('#hist').innerHTML = h.length ? h.map(x => `<div class="hist"><small>${esc(x.t)}</small><br>${x.r.map((d, i) => `${i + 1}. ${esc(d.name)}: ${d.score}/100`).join('<br>')}</div>`).join('') : '<p class="sub">Nothing yet. Run a check first.</p>';
 }
 
 $('#go').addEventListener('click', async () => {

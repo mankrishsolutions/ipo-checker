@@ -64,6 +64,7 @@ th:first-child,td:first-child{text-align:left}
 .srcs a{color:var(--vio)}.srcs small{color:var(--mute)}
 .chk{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0 0;font-size:13px}
 .chk span{padding:3px 10px;border-radius:999px;border:2px solid var(--ink)}.chk .ok{background:var(--lime)}.chk .no{background:#fff;color:var(--mute);border-color:var(--line)}
+.disc{background:#FFF7D6;border:2px solid var(--ink);border-radius:14px;padding:10px 14px;font-size:14px;margin:16px 0 0;max-width:960px}
 .plain{max-width:680px;line-height:1.7}
 .hist{background:#fff;border:2px solid var(--ink);border-radius:16px;padding:14px 18px;margin-bottom:12px;max-width:900px}
 @media(max-width:760px){

@@ -7,7 +7,7 @@
 <title>IPO Checker</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Figtree:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 <aside class="side">
@@ -17,7 +17,7 @@
     <button class="nav" data-view="history"><i>🕘</i>Past checks</button>
     <button class="nav" data-view="how"><i>💡</i>How it works</button>
   </nav>
-  <p class="note">Public web data only. Not financial advice.</p>
+  <p class="note">Research only. Not a recommendation to apply.</p>
 </aside>
 <main>
   <section class="view on" id="check">
@@ -28,6 +28,7 @@
       <input id="name" placeholder="e.g. SRIT India Ltd" autocomplete="off" enterkeyhint="done">
       <button id="go" class="go">Check IPOs</button>
     </div>
+    <p class="disc"><b>Research only, not advice.</b> This is not a suggestion to apply or not to apply for any IPO. Scores only summarise data found on public websites.</p>
     <p id="msg" class="msg" role="status"></p>
     <div id="out"></div>
   </section>
@@ -40,10 +41,10 @@
       <li><b>Company financials (30%):</b> revenue and profit growth, profit margin, return on equity, debt.</li>
       <li><b>Valuation (20%):</b> P/E, price to book, and P/E against profit growth.</li>
       <li><b>News and reviews (15%):</b> tone of recent headlines and how many say subscribe or avoid.</li>
-      <li>65 and above: Apply. 45 to 64: Maybe. Below 45: Skip. If a source has no data, its area is left out and confidence drops.</li>
+      <li>Each score runs from 0 to 100. A higher score means the public data looks stronger. It is not a recommendation to apply or not to apply. If a source has no data, that area is left out and confidence drops.</li>
     </ul>
   </section>
 </main>
-<script src="app.js"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>
