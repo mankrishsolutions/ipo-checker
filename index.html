@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#F4F1FF">
 <title>IPO Checker</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Figtree:wght@400;500;700&display=swap" rel="stylesheet">
@@ -12,19 +13,19 @@
 <aside class="side">
   <div class="brand"><span class="dot"></span>IPO Checker</div>
   <nav>
-    <button class="nav on" data-view="check">Check IPOs</button>
-    <button class="nav" data-view="history">Past checks</button>
-    <button class="nav" data-view="how">How scoring works</button>
+    <button class="nav on" data-view="check"><i>⚡</i>Check IPOs</button>
+    <button class="nav" data-view="history"><i>🕘</i>Past checks</button>
+    <button class="nav" data-view="how"><i>💡</i>How it works</button>
   </nav>
   <p class="note">Public web data only. Not financial advice.</p>
 </aside>
 <main>
   <section class="view on" id="check">
     <h1>Which IPOs are you eyeing?</h1>
-    <p class="sub">Type up to 5 company names. Press Enter after each one.</p>
+    <p class="sub">Add up to 5 company names. Press Enter after each one.</p>
     <div class="box">
       <div id="chips"></div>
-      <input id="name" placeholder="e.g. SRIT India Ltd" autocomplete="off">
+      <input id="name" placeholder="e.g. SRIT India Ltd" autocomplete="off" enterkeyhint="done">
       <button id="go" class="go">Check IPOs</button>
     </div>
     <p id="msg" class="msg" role="status"></p>
@@ -32,14 +33,14 @@
   </section>
   <section class="view" id="history"><h1>Past checks</h1><div id="hist"></div></section>
   <section class="view" id="how">
-    <h1>How scoring works</h1>
-    <p class="sub">Every score starts at 50 and moves with what the web says.</p>
+    <h1>How it works</h1>
+    <p class="sub">Four areas are scored from 0 to 100, then combined into one score.</p>
     <ul class="plain">
-      <li>GMP as a percentage of the upper price band: up to +30 or -25.</li>
-      <li>Total subscription multiple: up to +15, or -10 if under-subscribed.</li>
-      <li>Valuation: P/E under 20 and ROE over 20% add points; P/E over 40 or debt/equity over 1 subtracts.</li>
-      <li>Recent news headlines: positive versus cautious tone, up to +/-10.</li>
-      <li>65 and above: Apply. 45 to 64: Maybe. Below 45: Skip. The green and grey ticks on each card show which sources answered.</li>
+      <li><b>Market demand (35%):</b> GMP as a share of the price band, subscription multiples, institutional bidding.</li>
+      <li><b>Company financials (30%):</b> revenue and profit growth, profit margin, return on equity, debt.</li>
+      <li><b>Valuation (20%):</b> P/E, price to book, and P/E against profit growth.</li>
+      <li><b>News and reviews (15%):</b> tone of recent headlines and how many say subscribe or avoid.</li>
+      <li>65 and above: Apply. 45 to 64: Maybe. Below 45: Skip. If a source has no data, its area is left out and confidence drops.</li>
     </ul>
   </section>
 </main>
