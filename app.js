@@ -28,15 +28,23 @@ const fmt = (v, p = '', s = '') => v == null ? 'n/a' : p + v + s;
 
 function render(data) {
   data.sort((a, b) => b.score - a.score);
-  const rank = data.map((d, i) => `<li><span class="n">${i + 1}</span><span class="nm">${esc(d.name)}</span><span class="badge ${d.call.replace(' ', '')}">${d.call}</span><div class="score" style="--s:${d.score}"><span>${d.score}</span></div></li>`).join('');
-  const cards = data.map(d => `<article class="card"><h3>${esc(d.name)}<span class="badge ${d.call.replace(' ', '')}">${d.call}</span></h3>
+  const cls = d => d.call.replace(' ', '');
+  const rank = data.map((d, i) => `<li><span class="n">${i + 1}</span><span class="nm">${esc(d.name)}${d.status ? `<small>${esc(d.status)}${d.dates ? ' · ' + esc(d.dates) : ''}</small>` : ''}</span><span class="badge ${cls(d)}">${d.call}</span><div class="score" style="--s:${d.score}"><span>${d.score}</span></div></li>`).join('');
+  const st = (l, v) => `<div class="stat"><small>${l}</small><b>${v}</b></div>`;
+  const cards = data.map(d => `<article class="card"><h3>${esc(d.name)}<span class="badge ${cls(d)}">${d.call}</span></h3>
     <div class="stats">
-      <div class="stat"><small>GMP</small><b>${fmt(d.gmp, '₹')}${d.gmpPct != null ? ' (' + d.gmpPct + '%)' : ''}</b></div>
-      <div class="stat"><small>Upper price band</small><b>${fmt(d.upper, '₹')}</b></div>
-      <div class="stat"><small>Subscription</small><b>${fmt(d.sub, '', 'x')}</b></div>
-      <div class="stat"><small>Positive vs cautious mentions</small><b>${d.pos ?? 0} / ${d.neg ?? 0}</b></div>
+      ${st('GMP', fmt(d.gmp, '₹') + (d.gmpPct != null ? ' (' + d.gmpPct + '%)' : ''))}
+      ${st('Upper price band', fmt(d.upper, '₹'))}
+      ${st('Subscription (total)', fmt(d.sub, '', 'x'))}
+      ${st('QIB / NII / Retail', [d.qib, d.nii, d.ret].map(v => fmt(v, '', 'x')).join(' / '))}
+      ${st('P/E (post IPO)', fmt(d.pe))}
+      ${st('ROE · Debt/Equity', fmt(d.roe, '', '%') + ' · ' + fmt(d.de))}
     </div>
-    ${d.sources.length ? `<ul class="srcs">${d.sources.map(s => `<li><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a></li>`).join('')}</ul>` : '<p class="sub">No pages found. Check the spelling or try the full registered name.</p>'}
+    ${d.why && d.why.length ? `<h4>Why this score</h4><ul class="srcs">${d.why.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
+    ${d.news && d.news.length ? `<h4>Latest news and analyst views</h4><ul class="srcs">${d.news.map(n => `<li><a href="${esc(n.url)}" target="_blank" rel="noopener">${esc(n.title)}</a> <small>${esc(n.date)}</small></li>`).join('')}</ul>` : ''}
+    <h4>Open the source pages</h4><ul class="srcs">${(d.pages || []).map(s => `<li><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a></li>`).join('')}</ul>
+    <p class="chk">${(d.checked || []).map(c => `<span class="${c.ok ? 'ok' : 'no'}">${c.ok ? '✓' : '✗'} ${esc(c.site)}</span>`).join('')}</p>
+    ${d.error ? `<p class="sub">Error: ${esc(d.error)}</p>` : ''}
   </article>`).join('');
   $('#out').innerHTML = `<h2>Apply in this order</h2><ol class="rank">${rank}</ol><h2>The details</h2><div class="cards">${cards}</div>`;
   try {

@@ -43,6 +43,10 @@ h2{font-family:'Bricolage Grotesque',sans-serif;font-size:22px;margin:32px 0 12p
 .srcs li{margin-bottom:6px}
 .plain{max-width:640px;line-height:1.7}
 .hist{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 18px;margin-bottom:10px;max-width:900px}
+.card h4{margin:16px 0 6px;font-size:15px}
+.nm small{display:block;font-weight:500;font-size:13px;color:var(--mute)}
+.chk{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 0;font-size:13px}
+.chk span{padding:3px 10px;border-radius:999px}.chk .ok{background:var(--lime)}.chk .no{background:var(--line);color:var(--mute)}
 @media(max-width:760px){
  body{grid-template-columns:1fr}
  .side{position:static;height:auto;flex-direction:row;flex-wrap:wrap;align-items:center;gap:8px;padding:12px}
