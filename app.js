@@ -4,7 +4,7 @@
    ========================================================= */
 
 const CONFIG = {
-  WORKER_URL: "https://ipos.mankrishsolutions.workers.dev"
+  WORKER_URL: "https://ipos.mankrishsolutions.workers.dev/research"
 };
 
 
