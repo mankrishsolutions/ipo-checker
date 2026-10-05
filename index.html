@@ -3,27 +3,34 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#F4F1FF">
+<meta name="theme-color" content="#F6F3FF">
 <title>IPO Checker</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Figtree:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
-<aside class="side">
+<div class="edge" id="edge"></div>
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Menu">
   <div class="brand"><span class="dot"></span>IPO Checker</div>
-  <nav>
-    <button class="nav on" data-view="check"><i>⚡</i>Check IPOs</button>
-    <button class="nav" data-view="history"><i>🕘</i>Past checks</button>
-    <button class="nav" data-view="how"><i>💡</i>How it works</button>
-  </nav>
+  <button class="nav on" data-view="check"><i>⚡</i>Check IPOs</button>
+  <button class="nav" data-view="history"><i>🕘</i>Past checks</button>
+  <button class="nav" data-view="how"><i>💡</i>How it works</button>
   <p class="note">Research only. Not a recommendation to apply.</p>
 </aside>
+<header class="top">
+  <button id="menu" class="menu" aria-label="Open menu">☰</button>
+  <div class="brand"><span class="dot"></span>IPO Checker</div>
+  <span class="sp"></span>
+  <button id="new" class="newb">＋ New check</button>
+  <div class="infow" id="infow"><button id="info" class="menu ghost" aria-label="Research only disclaimer">ⓘ</button><div id="tip" class="tip" role="tooltip"></div></div>
+</header>
 <main>
   <section class="view on" id="check">
-    <h1>Which IPOs are you eyeing?</h1>
-    <p class="sub">Add up to 5 company names. Press Enter after each one.</p>
-    <div class="box">
+    <div id="intro"><h1>Which IPOs are you eyeing?</h1>
+    <p class="sub">Add up to 5 company names. Press Enter after each one.</p></div>
+    <div class="box" id="sbox">
       <div id="chips"></div>
       <input id="name" placeholder="e.g. SRIT India Ltd" autocomplete="off" enterkeyhint="done">
       <button id="go" class="go">Check IPOs</button>
@@ -40,10 +47,10 @@
       <li><b>Company financials (30%):</b> revenue and profit growth, profit margin, return on equity, debt.</li>
       <li><b>Valuation (20%):</b> P/E, price to book, and P/E against profit growth.</li>
       <li><b>News and reviews (15%):</b> tone of recent headlines and how many say subscribe or avoid.</li>
-      <li>Each score runs from 0 to 100. A higher score means the public data looks stronger. It is not a recommendation to apply or not to apply. If a source has no data, that area is left out and confidence drops.</li>
+      <li>A higher score means the public data looks stronger. It is not a recommendation to apply or not to apply. If a source has no data, that area is left out and confidence drops.</li>
     </ul>
   </section>
 </main>
-<script src="app.js?v=3"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>
