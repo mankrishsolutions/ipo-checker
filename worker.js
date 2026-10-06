@@ -1,8 +1,8 @@
 // Cloudflare Worker: reads public IPO pages (IPO Ji, IPO Watch) + Google News headlines. No API keys.
 const H = { 'access-control-allow-origin': '*', 'content-type': 'application/json' };
-const UA = { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36', 'accept-language': 'en-IN,en;q=0.9' };
+const UA = { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36', accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', 'accept-language': 'en-IN,en;q=0.9', 'upgrade-insecure-requests': '1', 'sec-fetch-dest': 'document', 'sec-fetch-mode': 'navigate', 'sec-fetch-site': 'none', referer: 'https://www.google.com/' };
 const txt = h => h.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<!\[CDATA\[|\]\]>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&#x27;|&#39;/g, "'").replace(/&quot;/g, '"').replace(/&nbsp;/g, ' ').replace(/&lt;|&gt;/g, ' ').replace(/\s+/g, ' ').trim();
-const get = async u => { const r = await fetch(u, { headers: UA, cf: { cacheTtl: 300, cacheEverything: true } }); if (!r.ok) throw new Error(r.status); return r.text(); };
+const get = async u => { const r = await fetch(u, { headers: UA }); const h = await r.text(); if (!r.ok) throw new Error(r.status === 403 || r.status === 503 ? r.status + ' blocked by site' : String(r.status)); if (/just a moment|cf-chl|attention required/i.test(h.slice(0, 4000))) throw new Error('blocked by challenge page'); return h; };
 const num = (s, re) => { const m = s.match(re); return m ? parseFloat(m[1].replace(/,/g, '')) : null; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const STOP = new Set(['ltd', 'limited', 'pvt', 'private', 'ipo', 'india', 'the', 'and', 'of']);
@@ -20,18 +20,19 @@ const tri = (t, re) => { const m = t.match(re); return m ? [1, 2, 3].map(i => pa
 const heads = s => s ? [...s.matchAll(/([A-Z][\w&,'\/ -]{4,70}?):\s/g)].map(m => m[1].trim()).slice(0, 4) : [];
 function parseIpoji(h) {
   const t = txt(h);
-  const d = t.match(/IPO Dates\s*([A-Za-z]+ \d+, \d{4})\s*[–-]\s*([A-Za-z]+ \d+, \d{4})/);
+  const d = t.match(/IPO Dates\s*([A-Za-z]+ \d+, \d{4})\s*[–-]\s*([A-Za-z]+ \d+, \d{4})/i) || (m => m ? [m[0], m[1] + ', ' + m[3], m[2] + ', ' + m[3]] : null)(t.match(/open from ([A-Za-z]+ \d{1,2}) to ([A-Za-z]+ \d{1,2}), (\d{4})/i));
   let status = null;
   if (d) { const now = Date.now(), o = Date.parse(d[1]), c = Date.parse(d[2]) + 864e5; status = now < o ? 'Upcoming' : now < c ? 'Open now' : 'Bidding closed'; }
   const ab = t.match(/About\s+([A-Z][A-Za-z0-9&.,'() -]{2,60}?\s(?:Limited|Ltd\.?))/);
   const ti = (h.match(/<title>\s*([^<]+?)\s*<\/title>/i) || [])[1];
-  let full = ab ? ab[1].trim() : ti ? txt(ti).split(/\s[|–-]\s/)[0].replace(/\s+(SME\s+)?IPO\b.*$/i, '').trim() : null;
+  const hd = (h.match(/<h[1-3][^>]*>\s*([^<]*?\s(?:Limited|Ltd\.?))\s+IPO\s*<\/h[1-3]>/i) || [])[1];
+  let full = hd ? hd.trim() : ab ? ab[1].trim() : ti ? txt(ti).split(/\s[|–-]\s/)[0].replace(/\s+(SME\s+)?IPO\b.*$/i, '').trim() : null;
   if (full && (full.length > 70 || full.length < 3)) full = null;
   return {
     full,
-    gmp: num(t, /IPO GMP Today:\s*₹\s*(-?[\d,.]+)/i),
+    gmp: num(t, /IPO GMP Today:\s*₹\s*(-?[\d,.]+)/i) ?? num(t, /GMP Today\D{0,40}?₹\s*(-?[\d,.]+)/i), lot: num(t, /Lot Size\s*([\d,]+)/i),
     gmpPct: num(t, /GMP percentage\s*(-?[\d.]+)\s*%/i),
-    upper: num(t, /Upper price band\s*₹\s*([\d,.]+)/i) ?? num(t, /Price band\s*₹\s*[\d,.]+\s*[-–]\s*₹?\s*([\d,.]+)/i),
+    upper: num(t, /Upper price band\s*₹\s*([\d,.]+)/i) ?? num(t, /Price band\s*₹\s*[\d,.]+\s*[-–]\s*₹?\s*([\d,.]+)/i) ?? num(t, /priced at ₹\s*[\d,.]+\s*[–-]\s*₹?\s*([\d,.]+)/i),
     sub: num(t, /\bTotal\s+([\d.]+)\s*x\b/),
     qib: num(t, /Qualified Institutional Buyers \(QIBs\)\s*([\d.]+)\s*x/i),
     nii: num(t, /Non-Institutional Investors \(NIIs\)\s*([\d.]+)\s*x/i),
@@ -72,6 +73,31 @@ async function lineupIpoji() {
   return out;
 }
 
+const stat = (o, c) => { const n = Date.now() + 19800000; return Date.parse(o) > n ? 'Upcoming' : n < Date.parse(c) + 864e5 ? 'Open now' : 'Bidding closed'; };
+async function watchIndex() {
+  const h = await get('https://ipowatch.in/');
+  return [...new Set([...h.matchAll(/href="https:\/\/ipowatch\.in\/([a-z0-9-]+-ipo)\/"/g)].map(m => m[1]))];
+}
+async function watchPage(slug) {
+  const t = txt(await get(`https://ipowatch.in/${slug}/`));
+  const i = t.indexOf('Company Financials'), v = t.indexOf('Company Valuation');
+  const fin = i >= 0 ? t.slice(i, v > i ? v : i + 900) : '';
+  const rows = [...fin.matchAll(/((?:[A-Z][a-z]{2} )?20\d\d)\s*₹\s*([\d,.]+)\s*₹\s*([\d,.]+)\s*₹\s*(-?[\d,.]+)\s*₹\s*([\d,.]+)/g)].slice(-3);
+  const col = k => rows.length ? rows.map(r => parseFloat(r[k].replace(/,/g, ''))).reverse() : null;
+  const vt = v >= 0 ? t.slice(v, v + 900) : '';
+  const dm = t.match(/IPO Open Date\s*([A-Za-z]+ \d{1,2}, \d{4})\s*IPO Close Date\s*([A-Za-z]+ \d{1,2}, \d{4})/);
+  return {
+    upper: num(t, /IPO Price Band\s*₹?\s*[\d,.]+\s*(?:to|-|–)\s*₹?\s*([\d,.]+)/i), lot: num(t, /market lot is\s*([\d,]+)\s*shares/i), issue: num(t, /Issue Size\s*Approx\s*₹\s*([\d,.]+)\s*Crores/i),
+    rev: col(2), pat: col(4), assets: col(5),
+    roe: num(vt, /ROE:?\s*([\d.]+)\s*%/), patm: num(vt, /PAT Margin:?\s*([\d.]+)\s*%/), de: num(vt, /Debt to equity ratio:?\s*([\d.]+)/i), eps: num(vt, /Earning Per Share \(EPS\):?\s*₹\s*([\d.]+)/i), pe: num(vt, /P\/E Ratio:?\s*([\d.]+)/i), nav: num(vt, /Net Asset Value \(NAV\):?\s*₹\s*([\d.]+)/i),
+    open: dm && dm[1], close: dm && dm[2]
+  };
+}
+async function watchSub(slug) {
+  const t = txt(await get(`https://ipowatch.in/${slug}-subscription-status/`));
+  const f = re => num(t, re);
+  return { qib: f(/QIB[\s\S]{0,120}?(\d+(?:\.\d+)?)\s*x\b/i), nii: f(/\bNII[\s\S]{0,120}?(\d+(?:\.\d+)?)\s*x\b/), ret: f(/Retail[\s\S]{0,120}?(\d+(?:\.\d+)?)\s*x\b/i), sub: f(/\bTotal[\s\S]{0,80}?(\d+(?:\.\d+)?)\s*x\b/i) };
+}
 const SUF = /\s*\((?:Mainboard|NSE SME|BSE SME|Tentative date)\)/gi;
 async function premium() {
   const h = await get('https://www.ipopremium.in/');
@@ -87,7 +113,7 @@ async function premium() {
     const status = o == null || o > 0 ? 'upcoming' : cl >= 0 ? 'open' : 'closed';
     const flag = status === 'closed' ? null : status === 'open' ? (cl === 0 ? 'Closes today' : cl === 1 ? 'Closes tomorrow' : o === 0 ? 'Opens today' : null) : o === 1 ? 'Opens tomorrow' : null;
     const g = parseFloat(c[2]);
-    rows.push({ name, url: a[1], key: (name + ' ' + a[1].split('/').pop()).toLowerCase(), type: c[1].trim() === 'SME' ? 'SME' : 'Mainboard', exch: ex ? ex.replace(/mainboard/i, 'Mainboard') : null, gmp: isNaN(g) ? null : g, open: c[3], close: c[4], price: up ? `${pr[1]}–${pr[2]}` : null, upper: up || null, listing: c[6], status, flag });
+    rows.push({ name, url: new URL(a[1], 'https://www.ipopremium.in/').href, key: (name + ' ' + a[1].split('/').pop()).toLowerCase(), type: c[1].trim() === 'SME' ? 'SME' : 'Mainboard', exch: ex ? ex.replace(/mainboard/i, 'Mainboard') : null, gmp: isNaN(g) ? null : g, open: c[3], close: c[4], price: up ? `${pr[1]}–${pr[2]}` : null, upper: up || null, listing: c[6], status, flag });
   }
   return rows;
 }
@@ -98,6 +124,12 @@ async function lineup() {
   return { src: 'IPO Ji', items: Object.entries(o).flatMap(([k, a]) => a.map(i => { const [op, cl] = (i.dates || '').split(' to '); return { name: i.name, type: i.sme ? 'SME' : 'Mainboard', status: k, open: op || null, close: cl || null, flag: i.flag, gmp: null, price: null, listing: null }; })) };
 }
 
+async function premPage(url) {
+  const t = txt(await get(url)), i = t.indexOf('Subscription Details'), s = i >= 0 ? t.slice(i, i + 1500) : t;
+  const row = l => { const m = s.match(new RegExp(l + '\\s+[\\d,]+\\s+[\\d,]+\\s+([\\d.]+)', 'i')); return m ? parseFloat(m[1]) : null; };
+  return { qib: row('QIBs?'), nii: row('(?:\\bHNIs?|\\bNII)'), ret: row('(?:Individual|Retail)'), sub: row('Total') };
+}
+const slug = s => s.toLowerCase().replace(/\(.*?\)/g, ' ').replace(/\b(ltd|limited|pvt|private|ipo)\b\.?/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, '-');
 async function gmpFrom(url, re) { return num(txt(await get(url)), re); }
 
 const rss = async (u, key) => [...(await get(u)).matchAll(/<item>[\s\S]*?<title>([\s\S]*?)<\/title>[\s\S]*?<link>([\s\S]*?)<\/link>[\s\S]*?<pubDate>([\s\S]*?)<\/pubDate>/g)]
@@ -116,25 +148,44 @@ const cagr = a => a && a[0] > 0 && a[2] > 0 ? (Math.pow(a[0] / a[2], .5) - 1) * 
 const pillar = () => ({ s: 50, pts: [], has: false, add(v, t, g) { this.s += v; this.has = true; this.pts.push({ t, g }); } });
 const median = a => { a = [...a].sort((x, y) => x - y); return a[Math.floor(a.length / 2)]; };
 
-async function research(name, paths, rows = []) {
+async function research(name, paths, rows = [], widx = []) {
   const t = tokens(name);
-  const path = paths.filter(p => t.every(w => p.includes(w))).sort((a, b) => a.length - b.length)[0] || `/ipo/${t.join('-')}-ipo`;
-  const base = path.split('/').pop().replace(/-ipo$/, '');
+  const lm = paths.filter(p => t.every(x => p.includes(x))).sort((a, b) => a.length - b.length)[0];
   const pr = rows.filter(r => t.every(x => r.key.includes(x))).sort((a, b) => a.key.length - b.key.length)[0];
-  const [ji, w, wi, nw] = await Promise.allSettled([get('https://www.ipoji.com' + path).then(parseIpoji),
-    gmpFrom(`https://ipowatch.in/${base}-ipo-gmp-grey-market-premium/`, /IPO GMP is\s*₹\s*(-?[\d.]+)/i),
-    gmpFrom(`https://www.ipoinfo.ai/ipo-gmp/${base}`, /GMP today:\s*\+?₹\s*(-?[\d.]+)/i), news(name, t[0])]);
-  const p = ji.status === 'fulfilled' ? ji.value : {};
+  const g = slug(pr ? pr.name : name);
+  const path = lm || `/ipo/${g}-ipo`, base = lm ? lm.split('/').pop().replace(/-ipo$/, '') : g;
+  const ws = widx.filter(s => t.every(x => s.includes(x))).sort((a, b) => a.length - b.length)[0] || `${g}-ipo`;
+  const alt = path.startsWith('/sme-ipo/') ? path.replace('/sme-ipo/', '/ipo/') : path.replace('/ipo/', '/sme-ipo/');
+  const ji0 = async () => { let e0; for (const u of [path, alt]) { try { const o = parseIpoji(await get('https://www.ipoji.com' + u)); if (Object.values(o).some(v => typeof v === 'number' || Array.isArray(v))) return o; e0 = new Error('page had no readable data'); } catch (e) { e0 = e; } } throw e0; };
+  const [ji, w, wi, nw, wp, wsub, pp] = await Promise.allSettled([ji0(),
+    gmpFrom(`https://ipowatch.in/${ws}-gmp-grey-market-premium/`, /IPO GMP is\s*₹\s*(-?[\d.]+)/i),
+    gmpFrom(`https://www.ipoinfo.ai/ipo-gmp/${base}`, /GMP today:\s*\+?₹\s*(-?[\d.]+)/i), news(name, t[0]), watchPage(ws), watchSub(ws), pr ? premPage(pr.url) : Promise.reject(new Error('no match'))]);
+  const p0 = ji.status === 'fulfilled' ? ji.value : {};
+  const clean = o => Object.fromEntries(Object.entries(o || {}).filter(([, v]) => v != null));
+  const p = { ...clean(wp.value), ...clean(wsub.value), ...clean(p0), ...clean(pp.value) };
+  const up0 = p.upper ?? (pr && pr.upper);
+  if (p.pe == null && p.eps && up0) { p.pe = +(up0 / p.eps).toFixed(1); p.approx = true; }
+  if (p.pb == null && p.nav && up0) { p.pb = +(up0 / p.nav).toFixed(2); p.approx = true; }
   const items = nw.status === 'fulfilled' ? nw.value : [];
   const ok = x => x.status === 'fulfilled' && x.value != null;
   const gl = [p.gmp, ok(w) ? w.value : null, ok(wi) ? wi.value : null, pr ? pr.gmp : null].filter(v => v != null);
   const gmp = gl.length ? median(gl) : null, spread = gl.length > 1 ? Math.max(...gl) - Math.min(...gl) : 0;
   const upper = p.upper ?? (pr && pr.upper) ?? null;
   const gmpPct = gmp != null && upper ? +(gmp / upper * 100).toFixed(1) : p.gmpPct ?? null;
+  // Gather what each source returned, then show the comparison and the value used.
+  const raw = { ipoji: clean(p0), watch: { ...clean(wp.value), ...clean(wsub.value), ...(ok(w) ? { gmp: w.value } : {}) }, premium: pr ? { ...clean({ gmp: pr.gmp, upper: pr.upper }), ...clean(pp.value) } : {}, ipoinfo: ok(wi) ? { gmp: wi.value } : {} };
+  const SRC = ['ipoji', 'watch', 'premium', 'ipoinfo'];
+  const cover = Object.fromEntries(SRC.map(s => [s, Object.values(raw[s]).filter(v => typeof v === 'number' || Array.isArray(v)).length]));
+  const why = (r, ok2, n) => r.status === 'rejected' ? 'failed (' + String((r.reason && r.reason.message) || r.reason).slice(0, 40) + ')' : n;
   const has = (re) => items.filter(i => re.test(i.title)).length;
   const pos = has(/\b(subscribe|apply|positive|strong|bumper|robust|bullish|premium|oversubscribed|surge|jump)/i), neg = has(/\b(avoid|skip|weak|tepid|muted|discount|risk|cautious|neutral|flat|slump)/i);
   const sb = has(/\bsubscribe\b/i), av = has(/\b(avoid|skip)\b/i);
-  const checked = [{ site: 'IPO Ji', ok: ji.status === 'fulfilled' && (p.gmp != null || p.sub != null || p.rev != null) }, { site: 'IPO Premium', ok: !!pr }, { site: 'IPO Watch', ok: ok(w) }, { site: 'IPOInfo', ok: ok(wi) }, { site: 'News', ok: items.length > 0 }];
+  const checked = [
+    { site: 'IPO Ji', ok: ji.status === 'fulfilled' && cover.ipoji > 0, note: why(ji, 0, cover.ipoji + ' values') },
+    { site: 'IPO Watch', ok: cover.watch > 0, note: why(wp, 0, cover.watch + ' values') },
+    { site: 'IPO Premium', ok: !!pr && cover.premium > 0, note: pr ? why(pp, 0, cover.premium + ' values') : rows.length ? 'not in lineup' : 'lineup unavailable' },
+    { site: 'IPOInfo', ok: ok(wi), note: why(wi, 0, ok(wi) ? '1 value' : 'no GMP') },
+    { site: 'News', ok: items.length > 0, note: why(nw, 0, items.length + ' headlines') }];
 
   const F = pillar(), V = pillar(), D = pillar(), S = pillar();
   const rc = cagr(p.rev), pc = cagr(p.pat);
@@ -143,7 +194,7 @@ async function research(name, paths, rows = []) {
   if (p.patm != null) F.add(p.patm >= 10 ? 8 : p.patm >= 5 ? 3 : p.patm < 3 ? -8 : 0, `Profit margin ${p.patm}%`, p.patm >= 8 ? true : p.patm < 3 ? false : null);
   if (p.roe != null) F.add(p.roe >= 20 ? 8 : p.roe < 10 ? -8 : 0, `Return on equity ${p.roe}%`, p.roe >= 15 ? true : p.roe < 10 ? false : null);
   if (p.de != null) F.add(p.de <= .5 ? 5 : p.de > 1 ? -10 : 0, `Debt to equity ${p.de}`, p.de <= .5 ? true : p.de > 1 ? false : null);
-  if (p.pe != null) V.add(p.pe <= 15 ? 30 : p.pe <= 25 ? 15 : p.pe <= 40 ? 0 : -25, `P/E after IPO is ${p.pe}${p.pe <= 25 ? ', fairly priced' : p.pe > 40 ? ', expensive' : ''}`, p.pe <= 25 ? true : p.pe > 40 ? false : null);
+  if (p.pe != null) V.add(p.pe <= 15 ? 30 : p.pe <= 25 ? 15 : p.pe <= 40 ? 0 : -25, `P/E ${p.approx ? 'is about ' : 'after IPO is '}${p.pe}${p.pe <= 25 ? ', fairly priced' : p.pe > 40 ? ', expensive' : ''}`, p.pe <= 25 ? true : p.pe > 40 ? false : null);
   if (p.pb != null) V.add(p.pb <= 3 ? 8 : p.pb > 8 ? -10 : 0, `Price to book ${p.pb}`, p.pb <= 3 ? true : p.pb > 8 ? false : null);
   if (p.pe != null && pc > 0) { const g = p.pe / pc; V.add(g <= 1 ? 10 : g >= 2.5 ? -8 : 0, `P/E is ${g.toFixed(1)}x the profit growth rate${g <= 1 ? ', cheap for its growth' : ''}`, g <= 1 ? true : g >= 2.5 ? false : null); }
   if (gmpPct != null) D.add(clamp(gmpPct * 1.2, -40, 40), `GMP ₹${gmp} (${gmpPct}%)${gl.length > 1 ? ' across ' + gl.length + ' sources' : ''}${spread > Math.max(5, gmp * .25) ? ', sources disagree' : ''}`, gmpPct >= 10 ? true : gmpPct <= 0 ? false : null);
@@ -157,8 +208,8 @@ async function research(name, paths, rows = []) {
   const all = act.flatMap(([x]) => x.pts), good = all.filter(x => x.g === true), bad = all.filter(x => x.g === false);
   const verdict = !act.length ? 'Nothing found. Check the spelling against the exact name on IPO Ji.' : `${call === 'Apply' ? 'Data signals are mostly strong' : call === 'Maybe' ? 'Data signals are mixed' : 'Data signals are mostly weak'}. ${good[0] ? 'Strongest point: ' + good[0].t + '. ' : ''}${bad[0] ? 'Weakest point: ' + bad[0].t + '.' : 'No major weak points in the data found.'}`;
   const out = {}; Object.entries(pl).forEach(([k, [x]]) => out[k] = { score: x.has ? Math.round(clamp(x.s, 0, 100)) : null, pts: x.pts });
-  const pages = [{ title: 'IPO Ji: financials, GMP, subscription', url: 'https://www.ipoji.com' + path }, { title: 'IPO Watch: GMP history', url: `https://ipowatch.in/${base}-ipo-gmp-grey-market-premium/` }, { title: 'IPOInfo: GMP', url: `https://www.ipoinfo.ai/ipo-gmp/${base}` }, { title: 'Chittorgarh: search', url: 'https://www.chittorgarh.com/search/?q=' + encodeURIComponent(name) }];
-  return { name: (pr && pr.name) || p.full || name, query: name, score, call, verdict, confidence: act.length >= 4 ? 'High' : act.length >= 3 ? 'Medium' : 'Low', ...p, gmp, gmpPct, upper, status: p.status || (pr && { open: 'Open now', upcoming: 'Upcoming', closed: 'Bidding closed' }[pr.status]) || null, dates: p.dates || (pr && pr.open ? pr.open + ' to ' + pr.close : null), pillars: out, news: items, checked, pages };
+  const pages = [{ title: 'IPO Ji: financials, GMP, subscription', url: 'https://www.ipoji.com' + path }, { title: 'IPO Watch: IPO details', url: `https://ipowatch.in/${ws}/` }, { title: 'IPO Watch: GMP history', url: `https://ipowatch.in/${ws}-gmp-grey-market-premium/` }, { title: 'IPOInfo: GMP', url: `https://www.ipoinfo.ai/ipo-gmp/${base}` }, { title: 'Chittorgarh: search', url: 'https://www.chittorgarh.com/search/?q=' + encodeURIComponent(name) }];
+  return { name: (pr && pr.name) || p.full || name, query: name, score, call, verdict, confidence: act.length >= 4 ? 'High' : act.length >= 3 ? 'Medium' : 'Low', ...p, gmp, gmpPct, upper, status: p.status || (p.open ? stat(p.open, p.close) : null) || (pr && { open: 'Open now', upcoming: 'Upcoming', closed: 'Bidding closed' }[pr.status]) || null, dates: p.dates || (p.open ? p.open + ' to ' + p.close : null) || (pr && pr.open ? pr.open + ' to ' + pr.close : null), pillars: out, news: items, checked, pages };
 }
 
 export default {
@@ -168,8 +219,8 @@ export default {
     if (u.pathname === '/api/lineup') return new Response(JSON.stringify(await lineup().catch(() => ({ open: [], upcoming: [], closed: [] }))), { headers: { ...H, 'cache-control': 'public, max-age=600' } });
     if (u.pathname !== '/api/research') return new Response(JSON.stringify({ ok: true, usage: '/api/research?names=A|B|C' }), { headers: H });
     const names = (u.searchParams.get('names') || '').split('|').map(s => s.trim()).filter(Boolean).slice(0, 5);
-    const [paths, rows] = await Promise.all([listing().catch(() => []), premium().catch(() => [])]);
-    const data = await Promise.all(names.map(n => research(n, paths, rows).catch(e => ({ name: n, score: 0, call: 'No data', verdict: 'Something went wrong.', pillars: {}, news: [], checked: [], pages: [], error: String(e) }))));
+    const [paths, rows, widx] = await Promise.all([listing().catch(() => []), premium().catch(() => []), watchIndex().catch(() => [])]);
+    const data = await Promise.all(names.map(n => research(n, paths, rows, widx).catch(e => ({ name: n, score: 0, call: 'No data', verdict: 'Something went wrong.', pillars: {}, news: [], checked: [], pages: [], error: String(e) }))));
     return new Response(JSON.stringify(data), { headers: H });
   }
 };

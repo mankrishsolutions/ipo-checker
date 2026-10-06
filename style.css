@@ -140,3 +140,10 @@ main{padding-top:12px}
 .ln .fl{background:#FCEBEB;color:#A32D2D;border-color:#F09595}
 .lg2 small{display:block;font-size:11px;color:#1C8A3C}
 @media(max-width:700px){.lh{display:none}.lr{display:flex;flex-wrap:wrap;gap:2px 14px}.ln{flex:1 0 100%}}
+
+.tw{overflow-x:auto}
+.mx{margin-bottom:10px}
+.mx table{width:100%;border-collapse:collapse;font-size:13px}
+.mx th,.mx td{padding:6px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+.mx th:first-child,.mx td:first-child{text-align:left}
+.mx td.u{font-weight:800;background:#EAF3DE}.mx td.dif{color:#C23B3B;font-weight:700}

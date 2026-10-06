@@ -31,7 +31,7 @@ const BAND = { Apply: '#CFF54A', Maybe: '#FFCFA8', Skip: '#FFB3DE', 'No data': '
 let R = [], tab = 'all';
 const short = n => n.replace(/\b(ltd|limited)\b\.?/gi, '').trim();
 
-const FS = [['Revenue', 'rev', '#378ADD'], ['Profit', 'pat', '#1D9E75'], ['Net worth', 'nw', '#7F77DD']];
+const FS = [['Revenue', 'rev', '#378ADD'], ['Profit', 'pat', '#1D9E75'], ['Net worth', 'nw', '#7F77DD'], ['Assets', 'assets', '#EF9F27']];
 let fq = 0;
 function chart(d, q = 0) {
   const a = d[FS[q][1]];
@@ -47,7 +47,7 @@ function chart(d, q = 0) {
 }
 
 function company(d) {
-  const pl = d.pillars || {}, kp = [['GMP', fmt(d.gmp, '₹') + (d.gmpPct != null ? ` (${d.gmpPct}%)` : '')], ['Price band', fmt(d.upper, '₹')], ['Subscribed', fmt(d.sub, '', 'x')], ['QIB · NII · Retail', [d.qib, d.nii, d.ret].map(v => fmt(v, '', 'x')).join(' · ')], ['P/E · P/B', `${fmt(d.pe)} · ${fmt(d.pb)}`], ['ROE · D/E', `${fmt(d.roe, '', '%')} · ${fmt(d.de)}`]];
+  const pl = d.pillars || {}, kp = [['GMP', fmt(d.gmp, '₹') + (d.gmpPct != null ? ` (${d.gmpPct}%)` : '')], ['Price band', fmt(d.upper, '₹')], ['Subscribed', fmt(d.sub, '', 'x')], ['QIB · NII · Retail', [d.qib, d.nii, d.ret].map(v => fmt(v, '', 'x')).join(' · ')], ['P/E · P/B', `${d.approx ? '~' : ''}${fmt(d.pe)} · ${d.approx ? '~' : ''}${fmt(d.pb)}`], ['ROE · D/E', `${fmt(d.roe, '', '%')} · ${fmt(d.de)}`]];
   const pts = PC.flatMap(p => (pl[p[0]] && pl[p[0]].pts) || []);
   const list = (a, ic) => (a && a.length ? a.map(x => `<div class="l">${ic} ${esc(x)}</div>`).join('') : '<div class="l">Not found.</div>');
   return `<div class="ph"><div><h2>${esc(d.name)}</h2><small>${[d.status, d.dates, 'Confidence: ' + (d.confidence || 'Low'), d.issue ? 'Issue ₹' + d.issue + ' Cr' : ''].filter(Boolean).map(esc).join(' · ')}</small></div><div class="pill">Score ${d.score}/100</div></div>
@@ -59,7 +59,8 @@ function company(d) {
   <div class="grid">${pts.length ? `<div class="c"><h3>Reasons behind the score</h3><ul class="pts">${pts.map(x => `<li class="${x.g === true ? 't' : x.g === false ? 'f' : ''}">${esc(x.t)}</li>`).join('')}</ul></div>` : ''}
   <div class="c"><h3>Latest news and analyst views</h3>${d.news && d.news.length ? `<ul class="srcs">${d.news.map(n => `<li><a href="${esc(n.url)}" target="_blank" rel="noopener">${esc(n.title)}</a> <small>${esc(n.date)}</small></li>`).join('')}</ul>` : '<p class="sub">No recent headlines found.</p>'}</div>
   <div class="c"><h3>Source pages</h3><ul class="srcs">${(d.pages || []).map(s => `<li><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a></li>`).join('')}</ul>
-  <p class="chk">${(d.checked || []).map(x => `<span class="${x.ok ? 'ok' : 'no'}">${x.ok ? '✓' : '✗'} ${esc(x.site)}</span>`).join('')}</p></div></div>
+  <p class="chk">${(d.checked || []).map(x => `<span class="${x.ok ? 'ok' : 'no'}">${x.ok ? '✓' : '✗'} ${esc(x.site)}${x.ok ? '' : ': ' + esc(x.note || 'no data')}</span>`).join('')}</p>
+</div></div>
   ${d.error ? `<p class="sub">Error: ${esc(d.error)}</p>` : ''}`;
 }
 
