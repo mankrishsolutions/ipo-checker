@@ -11,7 +11,7 @@ function drawChips() {
 }
 function add(v) { v = v.trim(); if (v && names.length < 5 && !names.includes(v)) { names.push(v); drawChips(); } }
 $('#name').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); add(e.target.value); e.target.value = ''; } });
-$('#chips').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { names.splice(+b.dataset.i, 1); drawChips(); } });
+$('#chips').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { names.splice(+b.dataset.i, 1); drawChips(); drawLine(); } });
 const body = document.body, open = v => body.classList.toggle('open', v);
 $('#menu').addEventListener('click', () => open(!body.classList.contains('open')));
 $('#scrim').addEventListener('click', () => open(false));
@@ -112,10 +112,36 @@ $('#go').addEventListener('click', async () => {
 });
 
 $('#new').addEventListener('click', () => {
-  names = []; drawChips(); R = []; $('#out').innerHTML = ''; $('#msg').textContent = '';
+  names = []; drawChips(); drawLine(); R = []; $('#out').innerHTML = ''; $('#msg').textContent = '';
   $('#check').classList.remove('done', 'edit'); document.body.classList.remove('done');
   document.querySelector('.nav[data-view="check"]').click(); $('#name').focus();
 });
 $('#tip').innerHTML = DISC;
 $('#info').addEventListener('click', e => { e.stopPropagation(); $('#infow').classList.toggle('show'); });
 document.addEventListener('click', () => $('#infow').classList.remove('show'));
+
+let L = null, lf = 'all', lm = 'all';
+const ST = [['all', 'All', '#8A87A8'], ['open', 'Open', '#1D9E75'], ['upcoming', 'Upcoming', '#EF9F27'], ['closed', 'Closed', '#E24B4A']];
+const MT = [['all', 'All'], ['Mainboard', 'Mainboard'], ['SME', 'SME']];
+const dshort = s => (s ? s.replace(/, \d{4}/g, '') : '');
+function lrow(r) {
+  const pct = r.gmp != null && r.upper ? (r.gmp / r.upper * 100).toFixed(1) : null;
+  return `<button class="lr ${r.status}${names.includes(r.name) ? ' added' : ''}" data-n="${esc(r.name)}"><span class="ln"><b>${esc(r.name)}</b><em>${esc(r.exch || r.type)}</em>${r.flag ? `<em class="fl">${esc(r.flag)}</em>` : ''}</span><span class="lg2">${r.gmp != null ? '₹' + r.gmp : '–'}${pct ? `<small>${pct > 0 ? '+' : ''}${pct}%</small>` : ''}</span><span>${r.open ? dshort(r.open) + ' – ' + dshort(r.close) : '–'}</span><span>${r.price ? '₹' + esc(r.price) : '–'}</span><span>${r.listing ? dshort(r.listing) : '–'}</span></button>`;
+}
+function drawLine() {
+  const el = $('#line'); if (!el) return;
+  if (!L || !L.items || !L.items.length) { el.innerHTML = '<p class="hint">The live IPO lineup could not be loaded. You can still type any company name.</p>'; return; }
+  const q = $('#name').value.trim().toLowerCase(), base = L.items.filter(i => lm === 'all' || i.type === lm);
+  const rows = q ? L.items.filter(i => i.name.toLowerCase().includes(q)) : base.filter(i => lf === 'all' || i.status === lf);
+  const cnt = k => base.filter(i => k === 'all' || i.status === k).length;
+  el.innerHTML = `<div class="lbar"><div class="lt">${ST.map(([k, l, c]) => `<button class="tab${lf === k ? ' on' : ''}" data-lf="${k}"><i style="background:${c}"></i>${l} · ${cnt(k)}</button>`).join('')}</div><div class="seg">${MT.map(([k, l]) => `<button class="${lm === k ? 'on' : ''}" data-lm="${k}">${l}</button>`).join('')}</div></div>
+  <div class="ltab"><div class="lh"><span>Company</span><span>GMP</span><span>Open – Close</span><span>Price</span><span>Listing</span></div>${rows.length ? rows.map(lrow).join('') : '<p class="hint" style="padding:10px">Nothing matches. Press Enter to add what you typed.</p>'}</div><p class="hint">Tap a company to add it to your search, then press Check IPOs. Source: ${esc(L.src || 'IPO sites')}.</p>`;
+}
+async function loadLine() { try { const r = await fetch(WORKER + '/api/lineup'); L = await r.json(); } catch (e) { L = null; } drawLine(); }
+$('#line').addEventListener('click', e => {
+  const f = e.target.closest('[data-lf]'); if (f) { lf = f.dataset.lf; $('#name').value = ''; drawLine(); return; }
+  const m = e.target.closest('[data-lm]'); if (m) { lm = m.dataset.lm; drawLine(); return; }
+  const s = e.target.closest('[data-n]'); if (s) { add(s.dataset.n); $('#name').value = ''; drawLine(); }
+});
+$('#name').addEventListener('input', drawLine);
+loadLine();
