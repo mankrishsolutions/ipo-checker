@@ -126,8 +126,8 @@ const ST = [['all', 'All', '#8A87A8'], ['open', 'Open', '#1D9E75'], ['upcoming',
 const MT = [['all', 'All'], ['Mainboard', 'Mainboard'], ['SME', 'SME']];
 const dshort = s => (s ? s.replace(/, \d{4}/g, '') : '');
 function lrow(r) {
-  const pct = r.gmp != null && r.upper ? (r.gmp / r.upper * 100).toFixed(1) : null;
-  return `<button class="lr ${r.status}${names.includes(r.name) ? ' added' : ''}" data-n="${esc(r.name)}"><span class="ln"><b>${esc(r.name)}</b><em>${esc(r.exch || r.type)}</em>${r.flag ? `<em class="fl">${esc(r.flag)}</em>` : ''}</span><span class="lg2">${r.gmp != null ? '₹' + r.gmp : '–'}${pct ? `<small>${pct > 0 ? '+' : ''}${pct}%</small>` : ''}</span><span>${r.open ? dshort(r.open) + ' – ' + dshort(r.close) : '–'}</span><span>${r.price ? '₹' + esc(r.price) : '–'}</span><span>${r.listing ? dshort(r.listing) : '–'}</span></button>`;
+  const pct = r.gmp != null && r.upper ? (r.gmp / r.upper * 100).toFixed(1) : null, v = x => (x == null || x === '' ? '–' : x);
+  return `<button class="lr ${r.status}${names.includes(r.name) ? ' added' : ''}" data-n="${esc(r.name)}"><span class="ln"><b>${esc(r.name)}</b><em>${esc(r.exch || r.type)}</em>${r.flag ? `<em class="fl">${esc(r.flag)}</em>` : ''}</span><span class="lg2" data-l="GMP">${r.gmp != null ? '₹' + r.gmp : '–'}${pct ? `<small>${pct > 0 ? '+' : ''}${pct}%</small>` : ''}</span><span data-l="Open–Close">${r.open ? dshort(r.open) + ' – ' + dshort(r.close) : '–'}</span><span data-l="Price">${r.price ? '₹' + esc(r.price) : '–'}</span><span data-l="Lot">${v(r.lot)}</span><span data-l="Issue">${r.issue != null ? '₹' + r.issue + ' Cr' : '–'}</span><span data-l="Allotment">${r.allot ? dshort(r.allot) : '–'}</span><span data-l="Listing">${r.listing ? dshort(r.listing) : '–'}</span></button>`;
 }
 function drawLine() {
   const el = $('#line'); if (!el) return;
@@ -136,7 +136,7 @@ function drawLine() {
   const rows = q ? L.items.filter(i => i.name.toLowerCase().includes(q)) : base.filter(i => lf === 'all' || i.status === lf);
   const cnt = k => base.filter(i => k === 'all' || i.status === k).length;
   el.innerHTML = `<div class="lbar"><div class="lt">${ST.map(([k, l, c]) => `<button class="tab${lf === k ? ' on' : ''}" data-lf="${k}"><i style="background:${c}"></i>${l} · ${cnt(k)}</button>`).join('')}</div><div class="seg">${MT.map(([k, l]) => `<button class="${lm === k ? 'on' : ''}" data-lm="${k}">${l}</button>`).join('')}</div></div>
-  <div class="ltab"><div class="lh"><span>Company</span><span>GMP</span><span>Open – Close</span><span>Price</span><span>Listing</span></div>${rows.length ? rows.map(lrow).join('') : '<p class="hint" style="padding:10px">Nothing matches. Press Enter to add what you typed.</p>'}</div><p class="hint">Tap a company to add it to your search, then press Check IPOs. Source: ${esc(L.src || 'IPO sites')}.</p>`;
+  <div class="ltab"><div class="lh"><span>Company</span><span>GMP Rumors *</span><span>Open – Close</span><span>Price</span><span>Lot</span><span>Issue Size</span><span>Allotment</span><span>Listing</span></div>${rows.length ? rows.map(lrow).join('') : '<p class="hint" style="padding:10px">Nothing matches. Press Enter to add what you typed.</p>'}</div><p class="hint">Tap a company to add it to your search, then press Check IPOs. * GMP is indicative, not investment advice. Allotment is the next working day after close. Source: ${esc(L.src || 'IPO sites')}.</p>`;
 }
 async function loadLine() { try { const r = await fetch(WORKER + '/api/lineup'); L = await r.json(); } catch (e) { L = null; } drawLine(); }
 $('#line').addEventListener('click', e => {

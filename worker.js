@@ -1,9 +1,12 @@
 // Cloudflare Worker: reads public IPO pages (IPO Ji, IPO Watch) + Google News headlines. No API keys.
 const H = { 'access-control-allow-origin': '*', 'content-type': 'application/json' };
 const UA = { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36', accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', 'accept-language': 'en-IN,en;q=0.9', 'upgrade-insecure-requests': '1', 'sec-fetch-dest': 'document', 'sec-fetch-mode': 'navigate', 'sec-fetch-site': 'none', referer: 'https://www.google.com/' };
-const txt = h => h.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<!\[CDATA\[|\]\]>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&#x27;|&#39;/g, "'").replace(/&quot;/g, '"').replace(/&nbsp;/g, ' ').replace(/&lt;|&gt;/g, ' ').replace(/\s+/g, ' ').trim();
+const ENT = { amp: '&', quot: '"', apos: "'", nbsp: ' ', lt: ' ', gt: ' ', ndash: '–', mdash: '–', rsquo: "'", lsquo: "'", ldquo: '"', rdquo: '"', hellip: '…', times: 'x', rupee: '₹', middot: '·' };
+const txt = h => h.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<!\[CDATA\[|\]\]>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&#x([0-9a-f]+);/gi, (_, x) => String.fromCodePoint(parseInt(x, 16))).replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(+n)).replace(/&([a-z]+);/gi, (m, n) => ENT[n.toLowerCase()] ?? m).replace(/\s+/g, ' ').trim();
 const get = async u => { const r = await fetch(u, { headers: UA }); const h = await r.text(); if (!r.ok) throw new Error(r.status === 403 || r.status === 503 ? r.status + ' blocked by site' : String(r.status)); if (/just a moment|cf-chl|attention required/i.test(h.slice(0, 4000))) throw new Error('blocked by challenge page'); return h; };
 const num = (s, re) => { const m = s.match(re); return m ? parseFloat(m[1].replace(/,/g, '')) : null; };
+const MONI = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+const pd = s => { const m = String(s || '').match(/([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})/); if (m && MONI[m[1].slice(0, 3).toLowerCase()] != null) return Date.UTC(+m[3], MONI[m[1].slice(0, 3).toLowerCase()], +m[2]); const t = Date.parse(s); return isNaN(t) ? NaN : t; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const STOP = new Set(['ltd', 'limited', 'pvt', 'private', 'ipo', 'india', 'the', 'and', 'of']);
 const tokens = n => { const t = n.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(w => w && !STOP.has(w)); return t.length ? t : n.toLowerCase().split(/\s+/).filter(Boolean); };
@@ -98,30 +101,80 @@ async function watchSub(slug) {
   const f = re => num(t, re);
   return { qib: f(/QIB[\s\S]{0,120}?(\d+(?:\.\d+)?)\s*x\b/i), nii: f(/\bNII[\s\S]{0,120}?(\d+(?:\.\d+)?)\s*x\b/), ret: f(/Retail[\s\S]{0,120}?(\d+(?:\.\d+)?)\s*x\b/i), sub: f(/\bTotal[\s\S]{0,80}?(\d+(?:\.\d+)?)\s*x\b/i) };
 }
-const SUF = /\s*\((?:Mainboard|NSE SME|BSE SME|Tentative date)\)/gi;
+const DASH = '[-–—‑‒−~]';
+const SUF = /\s*\([^()]*\)/g;
+const band = s => { const m = String(s || '').replace(/[₹,]/g, ' ').match(new RegExp('(\\d+(?:\\.\\d+)?)\\s*(?:' + DASH + '|to)\\s*(\\d+(?:\\.\\d+)?)', 'i')) || String(s || '').replace(/[₹,]/g, ' ').match(/^\s*(\d+(?:\.\d+)?)\s*$/); if (!m) return null; const lo = +m[1], hi = +(m[2] ?? m[1]); return hi > 0 ? { price: lo === hi ? String(lo) : lo + '–' + hi, upper: hi } : null; };
+const cell = s => { const n = parseFloat(String(s || '').replace(/[₹,\s]|cr\.?/gi, '')); return isNaN(n) ? null : n; };
 async function premium() {
   const h = await get('https://www.ipopremium.in/');
   const n = new Date(Date.now() + 19800000), today = Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate());
-  const dd = s => { const t = Date.parse(s); return isNaN(t) ? null : Math.round((t - today) / 864e5); };
-  const rows = [];
-  for (const m of h.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)) {
-    const a = m[1].match(/href="([^"]*\/view\/ipo\/[^"]+)"/); if (!a) continue;
-    const c = [...m[1].matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/g)].map(x => txt(x[1]));
-    if (c.length < 7) continue;
-    const name = c[0].replace(SUF, '').trim(), ex = (c[0].match(/\((NSE SME|BSE SME|Mainboard)\)/i) || [])[1];
-    const o = dd(c[3]), cl = dd(c[4]), pr = c[5].match(/(\d+(?:\.\d+)?)\s*[–-]\s*(\d+(?:\.\d+)?)/), up = pr ? +pr[2] : 0;
-    const status = o == null || o > 0 ? 'upcoming' : cl >= 0 ? 'open' : 'closed';
-    const flag = status === 'closed' ? null : status === 'open' ? (cl === 0 ? 'Closes today' : cl === 1 ? 'Closes tomorrow' : o === 0 ? 'Opens today' : null) : o === 1 ? 'Opens tomorrow' : null;
-    const g = parseFloat(c[2]);
-    rows.push({ name, url: new URL(a[1], 'https://www.ipopremium.in/').href, key: (name + ' ' + a[1].split('/').pop()).toLowerCase(), type: c[1].trim() === 'SME' ? 'SME' : 'Mainboard', exch: ex ? ex.replace(/mainboard/i, 'Mainboard') : null, gmp: isNaN(g) ? null : g, open: c[3], close: c[4], price: up ? `${pr[1]}–${pr[2]}` : null, upper: up || null, listing: c[6], status, flag });
+  const dd = s => { const t = pd(s); return isNaN(t) ? null : Math.round((t - today) / 864e5); };
+  const rows = [], seen = new Set();
+  for (const tb of h.matchAll(/<table[\s\S]*?<\/table>/gi)) {
+    const trs = [...tb[0].matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)].map(x => x[1]);
+    const cellsOf = r => [...r.matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi)].map(x => txt(x[1]));
+    const hd = trs.map(cellsOf).find(c => c.some(x => /company/i.test(x))) || [];
+    const ix = re => hd.findIndex(x => re.test(x));
+    const col = { name: ix(/company/i), type: ix(/^type/i), gmp: ix(/gmp/i), open: ix(/^open/i), close: ix(/^close/i), price: ix(/price/i), lot: ix(/^lot/i), issue: ix(/issue/i), allot: ix(/allot/i), listing: ix(/listing/i) };
+    for (const r of trs) {
+      const a = r.match(/href="([^"]*\/view\/ipo\/[^"]+)"/); if (!a) continue;
+      let c = cellsOf(r); if (c.length < 5) continue;
+      const g = k => (col[k] >= 0 && col[k] < c.length ? c[col[k]] : null);
+      if (col.name < 0) Object.assign(col, { name: 0, type: 1, gmp: 2, open: 3, close: 4, price: 5, listing: 6 });
+      let open = g('open'), close = g('close');
+      if (open && !close) { const m = open.match(/([A-Za-z]{3,9} \d{1,2}(?:, \d{4})?)\s*(?:[-–—]|to)\s*([A-Za-z]{3,9} \d{1,2}(?:, \d{4})?)/); if (m) { open = m[1]; close = m[2]; } }
+      const yr = n.getUTCFullYear(), fy = s => (s && !/\d{4}/.test(s) ? s + ', ' + yr : s);
+      open = fy(open); close = fy(close);
+      const raw = g('name') || '', name = raw.replace(SUF, '').replace(/\s+/g, ' ').trim(), ex = (raw.match(/NSE\s*SME|BSE\s*SME|Mainboard/i) || [])[0];
+      const key0 = a[1].split('/').pop(); if (seen.has(key0)) continue; seen.add(key0);
+      const b = band(g('price')), o = dd(open), cl = dd(close);
+      const status = o == null || o > 0 ? 'upcoming' : cl >= 0 ? 'open' : 'closed';
+      const flag = status === 'closed' ? null : status === 'open' ? (cl === 0 ? 'Closes today' : cl === 1 ? 'Closes tomorrow' : o === 0 ? 'Opens today' : null) : o === 1 ? 'Opens tomorrow' : o === 0 ? 'Opens today' : null;
+      const gm = cell(g('gmp')), tent = /tentative/i.test(raw);
+      rows.push({ name, url: new URL(a[1], 'https://www.ipopremium.in/').href, key: (name + ' ' + key0).toLowerCase(), type: /sme/i.test(g('type') || '') || /SME/i.test(ex || '') ? 'SME' : 'Mainboard', exch: ex ? ex.replace(/mainboard/i, 'Mainboard').replace(/\s+/, ' ').toUpperCase().replace('MAINBOARD', 'Mainboard') : null, gmp: gm, open, close, price: b && b.price, upper: b && b.upper, lot: cell(g('lot')), issue: cell(g('issue')), allotRaw: g('allot'), listing: g('listing'), status, flag: flag || (tent && status === 'upcoming' ? 'Tentative dates' : null) });
+    }
   }
   return rows;
 }
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const allot = c => { const t = pd(c); if (isNaN(t)) return null; const d = new Date(t + 864e5); while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() + 1); return `${MON[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`; };
+async function ipojiCards() {
+  const pages = ['', 'ipo/current-ipo', 'sme-ipo/current-ipo', 'ipo/upcoming-ipo', 'sme-ipo/upcoming-ipo', 'ipo/listed-ipo', 'sme-ipo/listed-ipo'];
+  const hs = await Promise.all(pages.map(p => get('https://www.ipoji.com/' + p).catch(() => '')));
+  const out = new Map();
+  hs.forEach(h => {
+    const hits = [...h.matchAll(/<a[^>]+href="(?:https:\/\/www\.ipoji\.com)?\/(?:sme-)?ipo\/([a-z0-9-]+)-ipo"[^>]*>([\s\S]*?)<\/a>/g)].filter(m => !NAV.has(m[1]));
+    const first = new Map(), label = new Map();
+    hits.forEach(m => {
+      if (!first.has(m[1])) first.set(m[1], m.index);
+      const a = txt(m[2]);
+      if (a.length > 2 && a.length < 60 && !/\d{2}|^(view|apply|check allotment)$/i.test(a) && a.length > (label.get(m[1]) || '').length) label.set(m[1], a);
+    });
+    const order = [...first.entries()].sort((a, b) => a[1] - b[1]);
+    order.forEach(([slug, at], i) => {
+      if (out.has(slug)) return;
+      const t = txt(h.slice(at, Math.min(order[i + 1] ? order[i + 1][1] : at + 1400, at + 1400)));
+      const dm = t.match(/([A-Z][a-z]{2} \d{1,2}, \d{4})\s*[–-]\s*([A-Z][a-z]{2} \d{1,2}, \d{4})/);
+      const pm = t.match(/(?:Offer|Issue) Price\s*₹\s*([\d,.]+)(?:\s*[-–—]\s*₹?\s*([\d,.]+))?/);
+      out.set(slug, { slug, name: label.get(slug) || titleCase(slug), type: /\bSME\b/.test(t) ? 'SME' : 'Mainboard', open: dm && dm[1], close: dm && dm[2],
+        price: pm ? (pm[2] && pm[2] !== pm[1] ? `${pm[1]}–${pm[2]}` : pm[1]) : null, upper: pm ? parseFloat((pm[2] || pm[1]).replace(/,/g, '')) : null,
+        lot: num(t, /Lot Size\s*([\d,]+)/i), issue: num(t, /Issue Size\s*₹\s*(?:[\d,.]+\s*[-–]\s*)?([\d,.]+)\s*Cr/i), sub: num(t, /Subscription\s*([\d.]+)\s*x/i),
+        label: (t.match(/\b(Live|Allotment Awaited|Allotment Out|Upcoming|Listed)\b/) || [])[1] || null });
+    });
+  });
+  return [...out.values()];
+}
 async function lineup() {
-  const rows = await premium().catch(() => []);
-  if (rows.length) return { src: 'IPO Premium', items: rows.map(({ key, ...r }) => r) };
-  const o = await lineupIpoji();
-  return { src: 'IPO Ji', items: Object.entries(o).flatMap(([k, a]) => a.map(i => { const [op, cl] = (i.dates || '').split(' to '); return { name: i.name, type: i.sme ? 'SME' : 'Mainboard', status: k, open: op || null, close: cl || null, flag: i.flag, gmp: null, price: null, listing: null }; })) };
+  const [rows, cards] = await Promise.all([premium().catch(() => []), ipojiCards().catch(() => [])]);
+  const toks = s => s.toLowerCase().split(/[^a-z0-9]+/).filter(x => x && !STOP.has(x));
+  if (rows.length) {
+    const used = new Map();
+    cards.forEach(c => { const t = toks(c.slug); const r = t.length && rows.filter(x => t.every(y => x.key.includes(y))).sort((a, b) => a.key.length - b.key.length)[0]; if (r && !used.has(r)) used.set(r, c); });
+    return { src: cards.length ? 'IPO Premium and IPO Ji' : 'IPO Premium', items: rows.map(r => { const c = used.get(r) || {}; const { key, ...o } = r; return { ...o, price: o.price ?? c.price ?? null, upper: o.upper ?? c.upper ?? null, lot: o.lot ?? c.lot ?? null, issue: o.issue ?? c.issue ?? null, sub: c.sub ?? null, allot: o.allotRaw || allot(r.close), allotRaw: undefined }; }) };
+  }
+  const n = new Date(Date.now() + 19800000), today = Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate());
+  const dd = s => Math.round((pd(s) - today) / 864e5);
+  return { src: 'IPO Ji', items: cards.filter(c => c.open).map(c => { const o = dd(c.open), cl = dd(c.close), status = o > 0 ? 'upcoming' : cl >= 0 ? 'open' : 'closed'; return { name: c.name, type: c.type, exch: null, status, flag: status === 'open' ? (cl === 0 ? 'Closes today' : cl === 1 ? 'Closes tomorrow' : null) : o === 1 ? 'Opens tomorrow' : null, gmp: null, open: c.open, close: c.close, price: c.price, upper: c.upper, lot: c.lot, issue: c.issue, sub: c.sub, listing: null, allot: allot(c.close) }; }) };
 }
 
 async function premPage(url) {
