@@ -152,3 +152,26 @@ main{padding-top:12px}
 .lh,.lr{grid-template-columns:minmax(0,2.3fr) .7fr 1.3fr .9fr .6fr .9fr .8fr .8fr}
 @media(max-width:1000px){.lh,.lr{min-width:840px}}
 @media(max-width:700px){.lh,.lr{min-width:0}.lr span[data-l]::before{content:attr(data-l) ' ';color:var(--mute);font-size:11px}.lr{font-size:12px}}
+
+/* Loading UI shown after pressing Check IPOs */
+.spin{width:30px;height:30px;border-radius:50%;border:4px solid var(--line);border-top-color:var(--vio);border-right-color:var(--lime);animation:spin .8s linear infinite;flex:none}
+.spin.sm{width:16px;height:16px;border-width:3px;display:inline-block;vertical-align:-3px;margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ld{background:#fff;border:1.5px solid var(--ink);border-radius:20px;padding:16px 18px;margin-top:14px}
+.ld-top{display:flex;gap:14px;align-items:center}
+.ld-top b{display:block;font-size:16px}
+.ld-top small{display:block;color:var(--mute);font-size:13px}
+.ld-chips{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 4px}
+.ld-chips span{background:var(--vio);color:#fff;border-radius:99px;padding:3px 12px;font-size:13px;font-weight:700;animation:pulse 1.6s ease-in-out infinite}
+.ld-chips span:nth-child(2){animation-delay:.2s}.ld-chips span:nth-child(3){animation-delay:.4s}.ld-chips span:nth-child(4){animation-delay:.6s}.ld-chips span:nth-child(5){animation-delay:.8s}
+@keyframes pulse{50%{opacity:.55}}
+.ld-bar{height:6px;border-radius:99px;background:var(--bg);overflow:hidden;margin:12px 0 8px}
+.ld-bar i{display:block;height:100%;width:35%;border-radius:99px;background:linear-gradient(90deg,var(--vio),var(--lime));animation:slide 1.3s ease-in-out infinite}
+@keyframes slide{0%{margin-left:-35%}100%{margin-left:100%}}
+.ld-note{margin:0;font-size:12px;color:var(--mute)}
+.skel{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:12px}
+.skel div{height:64px;border-radius:16px;background:linear-gradient(90deg,#ECE8FA 25%,#F7F4FF 50%,#ECE8FA 75%);background-size:200% 100%;animation:shim 1.4s linear infinite}
+@keyframes shim{to{background-position:-200% 0}}
+.ld-line{display:flex;align-items:center}
+.go:disabled{opacity:.7}
+@media(prefers-reduced-motion:reduce){.spin,.ld-chips span,.ld-bar i,.skel div{animation:none}.ld-bar i{width:100%}}

@@ -50,7 +50,7 @@ function company(d) {
   const pl = d.pillars || {}, kp = [['GMP', fmt(d.gmp, '₹') + (d.gmpPct != null ? ` (${d.gmpPct}%)` : '')], ['Price band', fmt(d.upper, '₹')], ['Subscribed', fmt(d.sub, '', 'x')], ['QIB · NII · Retail', [d.qib, d.nii, d.ret].map(v => fmt(v, '', 'x')).join(' · ')], ['P/E · P/B', `${d.approx ? '~' : ''}${fmt(d.pe)} · ${d.approx ? '~' : ''}${fmt(d.pb)}`], ['ROE · D/E', `${fmt(d.roe, '', '%')} · ${fmt(d.de)}`]];
   const pts = PC.flatMap(p => (pl[p[0]] && pl[p[0]].pts) || []);
   const list = (a, ic) => (a && a.length ? a.map(x => `<div class="l">${ic} ${esc(x)}</div>`).join('') : '<div class="l">Not found.</div>');
-  return `<div class="ph"><div><h2>${esc(d.name)}</h2><small>${[d.status, d.dates, 'Confidence: ' + (d.confidence || 'Low'), d.issue ? 'Issue ₹' + d.issue + ' Cr' : ''].filter(Boolean).map(esc).join(' · ')}</small></div><div class="pill">Score ${d.score}/100</div></div>
+  return `<div class="ph"><div><h2>${esc(d.name)}</h2><small>${[d.status, d.dates, 'Confidence: ' + (d.confidence || 'Low'), d.issue > 0 ? 'Issue ' + cr(d.issue, d.issueApprox) : ''].filter(Boolean).map(esc).join(' · ')}</small></div><div class="pill">Score ${d.score}/100</div></div>
   <p class="verdict">${esc(d.verdict)}${d.status === 'Bidding closed' ? ' Bidding has closed, so read this as a listing-day view.' : ''}</p>
   <div class="kpis">${kp.map((k, i) => `<div class="k" style="background:${KC[i][0]};color:${KC[i][1]}"><small>${k[0]}</small><b>${esc(k[1])}</b></div>`).join('')}</div>
   <div class="c sbox"><h3>Score breakdown</h3><div class="sb">${PC.map(p => { const v = pl[p[0]] && pl[p[0]].score; return `<div class="sr"><span>${p[1]}</span><div><i style="width:${v ?? 0}%;background:${p[2]}"></i></div><b>${v ?? '–'}</b></div>`; }).join('')}</div></div>
@@ -97,19 +97,38 @@ function drawHistory() {
   $('#hist').innerHTML = h.length ? h.map(x => `<div class="hist"><small>${esc(x.t)}</small><br>${x.r.map((d, i) => `${i + 1}. ${esc(d.name)}: ${d.score}/100`).join('<br>')}</div>`).join('') : '<p class="sub">Nothing yet. Run a check first.</p>';
 }
 
+// Progress panel shown while the worker reads the IPO pages. Steps rotate so the wait feels alive.
+const STEPS = ['Finding your IPOs on IPO Premium and IPO Ji', 'Reading GMP, price band, lot size and issue size', 'Checking subscription numbers and listing dates', 'Pulling revenue, profit and valuation data', 'Scanning the latest news and analyst views', 'Scoring and ranking your picks'];
+let ldTimer = null;
+function startLoading() {
+  const t0 = Date.now(); let i = 0;
+  $('#out').innerHTML = `<div class="ld" role="status" aria-live="polite"><div class="ld-top"><span class="spin" aria-hidden="true"></span><div><b id="ldStep">${STEPS[0]}…</b><small id="ldTime">Starting…</small></div></div><div class="ld-chips">${names.map(n => `<span>${esc(n)}</span>`).join('')}</div><div class="ld-bar" aria-hidden="true"><i></i></div><p class="ld-note">Reading several public sites at once. This usually takes 10 to 20 seconds, a little longer the first time.</p></div><div class="skel" aria-hidden="true"><div></div><div></div><div></div><div></div></div>`;
+  $('#out').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  ldTimer = setInterval(() => {
+    const s = Math.round((Date.now() - t0) / 1000), a = $('#ldStep'), b = $('#ldTime');
+    if (!a) return;
+    i = Math.min(STEPS.length - 1, Math.floor(s / 3)); a.textContent = STEPS[i] + '…';
+    b.textContent = s >= 25 ? `${s}s · still working, some sites are slow today` : `${s}s elapsed`;
+  }, 1000);
+}
+function stopLoading() { clearInterval(ldTimer); ldTimer = null; }
+
 $('#go').addEventListener('click', async () => {
-  add($('#name').value); $('#name').value = '';
+  add($('#name').value); $('#name').value = ''; drawLine();
   if (!names.length) { $('#msg').textContent = 'Add at least one company name first.'; return; }
-  const btn = $('#go'); btn.disabled = true; $('#out').innerHTML = '';
-  $('#msg').textContent = 'Reading IPO pages, financials and news. This takes about 10 seconds.';
+  const btn = $('#go'); btn.disabled = true; btn.textContent = 'Checking…'; $('#msg').textContent = '';
+  startLoading();
+  const ac = new AbortController(), to = setTimeout(() => ac.abort(), 90000);
   try {
-    const r = await fetch(`${WORKER}/api/research?names=${encodeURIComponent(names.join('|'))}`);
+    const r = await fetch(`${WORKER}/api/research?names=${encodeURIComponent(names.join('|'))}`, { signal: ac.signal });
     if (!r.ok) throw new Error('Worker returned ' + r.status);
-    render(await r.json()); $('#msg').textContent = '';
+    const data = await r.json();
+    stopLoading(); render(data); $('#msg').textContent = '';
   } catch (e) {
-    $('#msg').textContent = 'Could not reach the worker (' + e.message + '). Check that it is deployed and the WORKER URL in app.js is correct.';
+    stopLoading(); $('#out').innerHTML = '';
+    $('#msg').textContent = e.name === 'AbortError' ? 'This is taking too long. The IPO sites may be slow right now. Please press Check IPOs to try again.' : 'Could not reach the worker (' + e.message + '). Check that it is deployed and the WORKER URL in app.js is correct.';
   }
-  btn.disabled = false;
+  clearTimeout(to); btn.disabled = false; btn.textContent = 'Check IPOs';
 });
 
 $('#new').addEventListener('click', () => {
@@ -125,9 +144,11 @@ let L = null, lf = 'all', lm = 'all';
 const ST = [['all', 'All', '#8A87A8'], ['open', 'Open', '#1D9E75'], ['upcoming', 'Upcoming', '#EF9F27'], ['closed', 'Closed', '#E24B4A']];
 const MT = [['all', 'All'], ['Mainboard', 'Mainboard'], ['SME', 'SME']];
 const dshort = s => (s ? s.replace(/, \d{4}/g, '') : '');
+// Issue size in crore: Indian digit grouping, "~" when it is estimated from shares x price band.
+const cr = (v, approx) => (v > 0 ? (approx ? '~' : '') + '₹' + Number(v).toLocaleString('en-IN', { maximumFractionDigits: 2 }) + ' Cr' : '–');
 function lrow(r) {
   const pct = r.gmp != null && r.upper ? (r.gmp / r.upper * 100).toFixed(1) : null, v = x => (x == null || x === '' ? '–' : x);
-  return `<button class="lr ${r.status}${names.includes(r.name) ? ' added' : ''}" data-n="${esc(r.name)}"><span class="ln"><b>${esc(r.name)}</b><em>${esc(r.exch || r.type)}</em>${r.flag ? `<em class="fl">${esc(r.flag)}</em>` : ''}</span><span class="lg2" data-l="GMP">${r.gmp != null ? '₹' + r.gmp : '–'}${pct ? `<small>${pct > 0 ? '+' : ''}${pct}%</small>` : ''}</span><span data-l="Open–Close">${r.open ? dshort(r.open) + ' – ' + dshort(r.close) : '–'}</span><span data-l="Price">${r.price ? '₹' + esc(r.price) : '–'}</span><span data-l="Lot">${v(r.lot)}</span><span data-l="Issue">${r.issue != null ? '₹' + r.issue + ' Cr' : '–'}</span><span data-l="Allotment">${r.allot ? dshort(r.allot) : '–'}</span><span data-l="Listing">${r.listing ? dshort(r.listing) : '–'}</span></button>`;
+  return `<button class="lr ${r.status}${names.includes(r.name) ? ' added' : ''}" data-n="${esc(r.name)}"><span class="ln"><b>${esc(r.name)}</b><em>${esc(r.exch || r.type)}</em>${r.flag ? `<em class="fl">${esc(r.flag)}</em>` : ''}</span><span class="lg2" data-l="GMP">${r.gmp != null ? '₹' + r.gmp : '–'}${pct ? `<small>${pct > 0 ? '+' : ''}${pct}%</small>` : ''}</span><span data-l="Open–Close">${r.open ? dshort(r.open) + ' – ' + dshort(r.close) : '–'}</span><span data-l="Price">${r.price ? '₹' + esc(r.price) : '–'}</span><span data-l="Lot">${r.lot > 0 ? r.lot.toLocaleString('en-IN') : '–'}</span><span data-l="Issue">${cr(r.issue, r.issueApprox)}</span><span data-l="Allotment">${r.allot ? dshort(r.allot) : '–'}</span><span data-l="Listing">${r.listing ? dshort(r.listing) : '–'}</span></button>`;
 }
 function drawLine() {
   const el = $('#line'); if (!el) return;
@@ -138,7 +159,7 @@ function drawLine() {
   el.innerHTML = `<div class="lbar"><div class="lt">${ST.map(([k, l, c]) => `<button class="tab${lf === k ? ' on' : ''}" data-lf="${k}"><i style="background:${c}"></i>${l} · ${cnt(k)}</button>`).join('')}</div><div class="seg">${MT.map(([k, l]) => `<button class="${lm === k ? 'on' : ''}" data-lm="${k}">${l}</button>`).join('')}</div></div>
   <div class="ltab"><div class="lh"><span>Company</span><span>GMP Rumors *</span><span>Open – Close</span><span>Price</span><span>Lot</span><span>Issue Size</span><span>Allotment</span><span>Listing</span></div>${rows.length ? rows.map(lrow).join('') : '<p class="hint" style="padding:10px">Nothing matches. Press Enter to add what you typed.</p>'}</div><p class="hint">Tap a company to add it to your search, then press Check IPOs. * GMP is indicative, not investment advice. Allotment is the next working day after close. Source: ${esc(L.src || 'IPO sites')}.</p>`;
 }
-async function loadLine() { try { const r = await fetch(WORKER + '/api/lineup'); L = await r.json(); } catch (e) { L = null; } drawLine(); }
+async function loadLine() { $('#line').innerHTML = '<p class="hint ld-line"><span class="spin sm" aria-hidden="true"></span>Loading the live IPO lineup, lot sizes and issue sizes…</p>'; try { const r = await fetch(WORKER + '/api/lineup'); L = await r.json(); } catch (e) { L = null; } drawLine(); }
 $('#line').addEventListener('click', e => {
   const f = e.target.closest('[data-lf]'); if (f) { lf = f.dataset.lf; $('#name').value = ''; drawLine(); return; }
   const m = e.target.closest('[data-lm]'); if (m) { lm = m.dataset.lm; drawLine(); return; }

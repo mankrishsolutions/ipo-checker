@@ -12,7 +12,7 @@ const STOP = new Set(['ltd', 'limited', 'pvt', 'private', 'ipo', 'india', 'the',
 const tokens = n => { const t = n.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(w => w && !STOP.has(w)); return t.length ? t : n.toLowerCase().split(/\s+/).filter(Boolean); };
 
 async function listing() {
-  const pages = [...(pr ? [{ title: 'IPO Premium: GMP and dates', url: pr.url }] : []), 'ipo/current-ipo', 'ipo/upcoming-ipo', 'ipo/listed-ipo', 'sme-ipo/current-ipo', 'sme-ipo/upcoming-ipo'];
+  const pages = ['ipo/current-ipo', 'ipo/upcoming-ipo', 'ipo/listed-ipo', 'sme-ipo/current-ipo', 'sme-ipo/upcoming-ipo'];
   const hs = await Promise.all(pages.map(p => get('https://www.ipoji.com/' + p).catch(() => '')));
   const set = new Set();
   hs.forEach(h => { for (const m of h.matchAll(/href="(?:https:\/\/www\.ipoji\.com)?(\/(?:sme-)?ipo\/[a-z0-9-]+-ipo)"/g)) set.add(m[1]); });
@@ -170,17 +170,49 @@ async function lineup() {
   if (rows.length) {
     const used = new Map();
     cards.forEach(c => { const t = toks(c.slug); const r = t.length && rows.filter(x => t.every(y => x.key.includes(y))).sort((a, b) => a.key.length - b.key.length)[0]; if (r && !used.has(r)) used.set(r, c); });
-    return { src: cards.length ? 'IPO Premium and IPO Ji' : 'IPO Premium', items: rows.map(r => { const c = used.get(r) || {}; const { key, ...o } = r; return { ...o, price: o.price ?? c.price ?? null, upper: o.upper ?? c.upper ?? null, lot: o.lot ?? c.lot ?? null, issue: o.issue ?? c.issue ?? null, sub: c.sub ?? null, allot: o.allotRaw || allot(r.close), allotRaw: undefined }; }) };
+    const items = rows.map(r => { const c = used.get(r) || {}; const { key, ...o } = r; return { ...o, price: o.price ?? c.price ?? null, upper: o.upper ?? c.upper ?? null, lot: o.lot ?? c.lot ?? null, issue: o.issue ?? c.issue ?? null, issueApprox: false, sub: c.sub ?? null, allot: o.allotRaw || allot(r.close), allotRaw: undefined }; });
+    return { src: cards.length ? 'IPO Premium and IPO Ji' : 'IPO Premium', items: await enrich(items) };
   }
   const n = new Date(Date.now() + 19800000), today = Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate());
   const dd = s => Math.round((pd(s) - today) / 864e5);
   return { src: 'IPO Ji', items: cards.filter(c => c.open).map(c => { const o = dd(c.open), cl = dd(c.close), status = o > 0 ? 'upcoming' : cl >= 0 ? 'open' : 'closed'; return { name: c.name, type: c.type, exch: null, status, flag: status === 'open' ? (cl === 0 ? 'Closes today' : cl === 1 ? 'Closes tomorrow' : null) : o === 1 ? 'Opens tomorrow' : null, gmp: null, open: c.open, close: c.close, price: c.price, upper: c.upper, lot: c.lot, issue: c.issue, sub: c.sub, listing: null, allot: allot(c.close) }; }) };
 }
 
+// IPO Premium's list page fills Lot / Issue Size with JavaScript, so the raw HTML has no values for them.
+// The per-IPO detail page does: "Lot Size 13 shares", "Price Band ₹1,066–1,118 ₹0.00 cr issue" and
+// "Total Issue Size 27,00,00,000 shares (aggregating up to ₹* Cr)". When the site shows ₹0.00 cr or ₹* Cr
+// (amount not published yet) we estimate it as total shares x upper price band and mark it approximate.
+function premDetail(t) {
+  const pos = v => (v != null && v > 0 ? v : null);
+  const lot = pos(num(t, /Lot Size\s*([\d,]+)\s*shares/i));
+  const bm = t.match(/Price Band\s*₹\s*([\d,.]+)\s*[–-]\s*₹?\s*([\d,.]+)/i), hi = bm ? parseFloat(bm[2].replace(/,/g, '')) : null;
+  let issue = pos(num(t, /₹\s*([\d,.]+)\s*cr\s*issue/i)), approx = false;
+  if (issue == null) {
+    const sh = pos(num(t, /Total Issue Size\s*([\d,]+)\s*shares/i)) ?? pos(num(t, /(?:Fresh Issue|Offer for Sale)\s*([\d,]+)\s*shares/i));
+    if (sh && hi > 0) { issue = Math.round(sh * hi / 1e5) / 100; approx = true; }
+  }
+  return { lot, issue, issueApprox: approx };
+}
 async function premPage(url) {
   const t = txt(await get(url)), i = t.indexOf('Subscription Details'), s = i >= 0 ? t.slice(i, i + 1500) : t;
   const row = l => { const m = s.match(new RegExp(l + '\\s+[\\d,]+\\s+[\\d,]+\\s+([\\d.]+)', 'i')); return m ? parseFloat(m[1]) : null; };
-  return { qib: row('QIBs?'), nii: row('(?:\\bHNIs?|\\bNII)'), ret: row('(?:Individual|Retail)'), sub: row('Total') };
+  const d = premDetail(t);
+  return { qib: row('QIBs?'), nii: row('(?:\\bHNIs?|\\bNII)'), ret: row('(?:Individual|Retail)'), sub: row('Total'), lot: d.lot, issue: d.issue, issueApprox: d.issueApprox || undefined };
+}
+// Fetch each IPO's detail page (open and upcoming first) to fill Lot and Issue Size. Capped to stay inside
+// Cloudflare's subrequest limit (50 on the free plan).
+async function enrich(items) {
+  const rank = { open: 0, upcoming: 1, closed: 2 };
+  const todo = items.filter(i => i.url).sort((a, b) => rank[a.status] - rank[b.status]).slice(0, 32);
+  await Promise.all(todo.map(async i => {
+    try {
+      const d = premDetail(txt(await get(i.url)));
+      if (d.lot != null) i.lot = d.lot;
+      if (d.issue != null && !d.issueApprox) { i.issue = d.issue; i.issueApprox = false; }
+      else if (i.issue == null && d.issue != null) { i.issue = d.issue; i.issueApprox = true; }
+    } catch (e) {}
+  }));
+  return items;
 }
 const slug = s => s.toLowerCase().replace(/\(.*?\)/g, ' ').replace(/\b(ltd|limited|pvt|private|ipo)\b\.?/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, '-');
 async function gmpFrom(url, re) { return num(txt(await get(url)), re); }
@@ -215,7 +247,9 @@ async function research(name, paths, rows = [], widx = []) {
     gmpFrom(`https://www.ipoinfo.ai/ipo-gmp/${base}`, /GMP today:\s*\+?₹\s*(-?[\d.]+)/i), news(name, t[0]), watchPage(ws), watchSub(ws), pr ? premPage(pr.url) : Promise.reject(new Error('no match'))]);
   const p0 = ji.status === 'fulfilled' ? ji.value : {};
   const clean = o => Object.fromEntries(Object.entries(o || {}).filter(([, v]) => v != null));
-  const p = { ...clean(wp.value), ...clean(wsub.value), ...clean(p0), ...clean(pp.value) };
+  const ppv = clean(pp.value);
+  if (ppv.issueApprox && (p0.issue != null || (wp.value && wp.value.issue != null))) { delete ppv.issue; delete ppv.issueApprox; }  // keep a published issue size over an estimate
+  const p = { ...clean(wp.value), ...clean(wsub.value), ...clean(p0), ...ppv };
   const up0 = p.upper ?? (pr && pr.upper);
   if (p.pe == null && p.eps && up0) { p.pe = +(up0 / p.eps).toFixed(1); p.approx = true; }
   if (p.pb == null && p.nav && up0) { p.pb = +(up0 / p.nav).toFixed(2); p.approx = true; }
@@ -266,10 +300,18 @@ async function research(name, paths, rows = [], widx = []) {
 }
 
 export default {
-  async fetch(req) {
+  async fetch(req, env, ctx) {
     if (req.method === 'OPTIONS') return new Response(null, { headers: { ...H, 'access-control-allow-headers': '*' } });
     const u = new URL(req.url);
-    if (u.pathname === '/api/lineup') return new Response(JSON.stringify(await lineup().catch(() => ({ open: [], upcoming: [], closed: [] }))), { headers: { ...H, 'cache-control': 'public, max-age=600' } });
+    if (u.pathname === '/api/lineup') {
+      // Cache the enriched lineup for 10 minutes so the ~30 detail-page reads do not run on every visit.
+      const ck = new Request('https://cache.ipo-checker.local/lineup-v2'), cache = caches.default;
+      if (!u.searchParams.has('refresh')) { const hit = await cache.match(ck); if (hit) return new Response(hit.body, { headers: { ...H, 'cache-control': 'public, max-age=600', 'x-cache': 'hit' } }); }
+      const data = await lineup().catch(() => ({ items: [] }));
+      const res = new Response(JSON.stringify(data), { headers: { ...H, 'cache-control': 'public, max-age=600' } });
+      if (data.items && data.items.length) ctx.waitUntil(cache.put(ck, res.clone()));
+      return res;
+    }
     if (u.pathname !== '/api/research') return new Response(JSON.stringify({ ok: true, usage: '/api/research?names=A|B|C' }), { headers: H });
     const names = (u.searchParams.get('names') || '').split('|').map(s => s.trim()).filter(Boolean).slice(0, 5);
     const [paths, rows, widx] = await Promise.all([listing().catch(() => []), premium().catch(() => []), watchIndex().catch(() => [])]);
