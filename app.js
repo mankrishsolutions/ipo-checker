@@ -166,4 +166,5 @@ $('#line').addEventListener('click', e => {
   const s = e.target.closest('[data-n]'); if (s) { add(s.dataset.n); $('#name').value = ''; drawLine(); }
 });
 $('#name').addEventListener('input', drawLine);
+document.getElementById("copyrightYear").textContent = new Date().getFullYear();
 loadLine();

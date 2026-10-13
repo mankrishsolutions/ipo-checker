@@ -15,11 +15,14 @@
 <div class="edge" id="edge"></div>
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-label="Menu">
-  <div class="brand"><span class="dot"></span>IPO Checker</div>
-  <button class="nav on" data-view="check"><i>⚡</i>Check IPOs</button>
-  <button class="nav" data-view="history"><i>🕘</i>Past checks</button>
-  <button class="nav" data-view="how"><i>💡</i>How it works</button>
-  <p class="note">Research only. Not a recommendation to apply.</p>
+    <div class="brand">
+        <img src="AksharSolutions.png" alt="Akshar Solutions" class="brand-logo">
+        <span>Akshar Solutions</span>
+    </div>
+    <button class="nav on" data-view="check"><i>⚡</i>Check IPOs</button>
+    <button class="nav" data-view="history"><i>🕘</i>Past checks</button>
+    <button class="nav" data-view="how"><i>💡</i>How it works</button>
+    <p class="note">Research only. Not a recommendation to apply.</p>
 </aside>
 <header class="top">
   <button id="menu" class="menu" aria-label="Open menu">☰</button>
@@ -32,30 +35,35 @@
   <div class="infow" id="infow"><button id="info" class="menu ghost" aria-label="Research only disclaimer">ⓘ</button><div id="tip" class="tip" role="tooltip"></div></div>
 </header>
 <main>
-  <section class="view on" id="check">
-    <div id="intro"><h1>Which IPOs are you eyeing?</h1>
-    <p class="sub">Add up to 5 company names. Press Enter after each one.</p></div>
-    <div class="box" id="sbox">
-      <div id="chips"></div>
-      <input id="name" placeholder="e.g. SRIT India Ltd" autocomplete="off" enterkeyhint="done">
-      <button id="go" class="go">Check IPOs</button>
-    </div>
-    <div id="line"></div>
-    <p id="msg" class="msg" role="status"></p>
-    <div id="out"></div>
-  </section>
-  <section class="view" id="history"><h1>Past checks</h1><div id="hist"></div></section>
-  <section class="view" id="how">
-    <h1>How it works</h1>
-    <p class="sub">Four areas are scored from 0 to 100, then combined into one score.</p>
-    <ul class="plain">
-      <li><b>Market demand (35%):</b> GMP as a share of the price band, subscription multiples, institutional bidding.</li>
-      <li><b>Company financials (30%):</b> revenue and profit growth, profit margin, return on equity, debt.</li>
-      <li><b>Valuation (20%):</b> P/E, price to book, and P/E against profit growth.</li>
-      <li><b>News and reviews (15%):</b> tone of recent headlines and how many say subscribe or avoid.</li>
-      <li>A higher score means the public data looks stronger. It is not a recommendation to apply or not to apply. If a source has no data, that area is left out and confidence drops.</li>
-    </ul>
-  </section>
+    <section class="view on" id="check">
+        <div id="intro">
+            <h1>Which IPOs are you eyeing?</h1>
+            <p class="sub">Add up to 5 company names. Press Enter after each one.</p>
+        </div>
+        <div class="box" id="sbox">
+            <div id="chips"></div>
+            <input id="name" placeholder="e.g. Jio Platform" autocomplete="off" enterkeyhint="done">
+            <button id="go" class="go">Check IPOs</button>
+        </div>
+        <div id="line"></div>
+        <p id="msg" class="msg" role="status"></p>
+        <div id="out"></div>
+    </section>
+    <section class="view" id="history"><h1>Past checks</h1><div id="hist"></div></section>
+    <section class="view" id="how">
+        <h1>How it works</h1>
+        <p class="sub">Four areas are scored from 0 to 100, then combined into one score.</p>
+        <ul class="plain">
+            <li><b>Market demand (35%):</b> GMP as a share of the price band, subscription multiples, institutional bidding.</li>
+            <li><b>Company financials (30%):</b> revenue and profit growth, profit margin, return on equity, debt.</li>
+            <li><b>Valuation (20%):</b> P/E, price to book, and P/E against profit growth.</li>
+            <li><b>News and reviews (15%):</b> tone of recent headlines and how many say subscribe or avoid.</li>
+            <li>A higher score means the public data looks stronger. It is not a recommendation to apply or not to apply. If a source has no data, that area is left out and confidence drops.</li>
+        </ul>
+    </section>
+    <footer class="text-center py-3">
+        © <span id="copyrightYear"></span> Akshar Solutions. All Rights Reserved.
+    </footer>
 </main>
 <script src="app.js?v=13"></script>
 </body>
